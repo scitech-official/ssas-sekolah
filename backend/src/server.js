@@ -45,27 +45,72 @@ app.get('/api/health', (req, res) => {
 
 // Database Diagnostic Check (For debugging deployment connection)
 app.get('/api/debug-db', async (req, res) => {
+  const results = {};
+  const { PrismaClient } = require('@prisma/client');
+
+  // Test 1: Standard Prisma instance
   try {
     const prisma = require('./config/prisma');
-    const userCount = await prisma.user.count();
-    res.json({
-      success: true,
-      message: 'Koneksi database PostgreSQL Supabase BERHASIL!',
-      userCount,
-      databaseUrlConfigured: !!process.env.DATABASE_URL,
-      databaseUrlSample: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'TIDAK DITEMUKAN',
-    });
+    results.primary = {
+      status: 'OK',
+      userCount: await prisma.user.count(),
+    };
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: 'Gagal terhubung ke database Supabase',
-      errorName: err.name,
-      errorCode: err.code,
-      errorMessage: err.message,
-      databaseUrlConfigured: !!process.env.DATABASE_URL,
-      databaseUrlSample: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'TIDAK DITEMUKAN',
-    });
+    results.primary = {
+      status: 'FAILED',
+      name: err.name,
+      message: err.message,
+    };
   }
+
+  // Test 2: Direct URL if available
+  if (process.env.DIRECT_URL) {
+    try {
+      const directPrisma = new PrismaClient({
+        datasources: { db: { url: process.env.DIRECT_URL } }
+      });
+      results.direct = {
+        status: 'OK',
+        userCount: await directPrisma.user.count(),
+      };
+      await directPrisma.$disconnect();
+    } catch (err) {
+      results.direct = {
+        status: 'FAILED',
+        name: err.name,
+        message: err.message,
+      };
+    }
+  }
+
+  // Test 3: Direct Supabase Host (port 5432 IPv6)
+  const match = (process.env.DATABASE_URL || '').match(/:([^@]+)@/);
+  if (match) {
+    const pwd = match[1];
+    const directHostUrl = `postgresql://postgres:${pwd}@db.xxwpzwrufvozpvqmusix.supabase.co:5432/postgres`;
+    try {
+      const hostPrisma = new PrismaClient({
+        datasources: { db: { url: directHostUrl } }
+      });
+      results.directHost5432 = {
+        status: 'OK',
+        userCount: await hostPrisma.user.count(),
+      };
+      await hostPrisma.$disconnect();
+    } catch (err) {
+      results.directHost5432 = {
+        status: 'FAILED',
+        name: err.name,
+        message: err.message,
+      };
+    }
+  }
+
+  res.json({
+    databaseUrlConfigured: !!process.env.DATABASE_URL,
+    directUrlConfigured: !!process.env.DIRECT_URL,
+    results,
+  });
 });
 
 // API Routes
