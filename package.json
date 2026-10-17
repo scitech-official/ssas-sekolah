@@ -9,10 +9,30 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
     "seed": "npm --prefix backend run prisma:seed",
-    "build": "npm --prefix frontend run build",
-    "build:all": "npm --prefix backend run build && npm --prefix frontend run build"
+    "build": "npx prisma generate --schema=backend/prisma/schema.prisma && (npx prisma db push --schema=backend/prisma/schema.prisma || true) && npm --prefix frontend install && npm --prefix frontend run build",
+    "prisma:generate": "prisma generate --schema=backend/prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema=backend/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.11",
+    "@prisma/client": "^6.4.0",
+    "archiver": "^7.0.1",
+    "axios": "^1.7.9",
+    "bcryptjs": "^3.0.2",
+    "bwip-js": "^4.5.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "prisma": "^6.4.0"
   }
 }

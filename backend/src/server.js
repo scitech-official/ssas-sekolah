@@ -60,13 +60,17 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start Server & Background Cron
-app.listen(PORT, () => {
-  console.log(`\n======================================================`);
-  console.log(`🚀 SSAS Backend Running on: http://localhost:${PORT}`);
-  console.log(`🏫 Unit: SMP NEGERI 3 JEMBER`);
-  console.log(`⏰ Timezone: Asia/Jakarta (WIB GMT+7)`);
-  console.log(`======================================================\n`);
+// Start Server & Background Cron (Only if running directly / locally, not in Vercel serverless)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`\n======================================================`);
+    console.log(`🚀 SSAS Backend Running on: http://localhost:${PORT}`);
+    console.log(`🏫 Unit: SMP NEGERI 3 JEMBER`);
+    console.log(`⏰ Timezone: Asia/Jakarta (WIB GMT+7)`);
+    console.log(`======================================================\n`);
 
-  initCronJobs();
-});
+    initCronJobs();
+  });
+}
+
+module.exports = app;
