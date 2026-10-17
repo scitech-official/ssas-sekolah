@@ -462,7 +462,7 @@ async function resetYearlyLogs(req, res) {
 
     const isValid = await bcrypt.compare(String(pin).trim(), adminUser.pinHash);
     if (!isValid) {
-      return res.status(401).json({ success: false, message: 'PIN Otoritas Admin salah!' });
+      return res.status(403).json({ success: false, message: 'PIN Otoritas Admin salah!' });
     }
 
     // Delete all attendance records and WaLogs

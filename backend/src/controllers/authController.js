@@ -98,7 +98,7 @@ async function verifyPin(req, res) {
 
     const isPinValid = await bcrypt.compare(String(pin).trim(), adminUser.pinHash);
     if (!isPinValid) {
-      return res.status(401).json({ success: false, message: 'PIN Otoritas Admin salah' });
+      return res.status(403).json({ success: false, message: 'PIN Otoritas Admin salah' });
     }
 
     return res.json({ success: true, message: 'PIN valid' });

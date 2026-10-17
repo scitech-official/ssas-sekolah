@@ -38,11 +38,15 @@ api.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
-// Intercept responses to handle 401 Unauthorized
+// Intercept responses to handle 401 Unauthorized (Session Expired)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    // Do NOT clear session if the 401 error is just an incorrect PIN or bad login attempt
+    const url = error.config?.url || '';
+    const isPinOrAuthAttempt = url.includes('/verify-pin') || url.includes('/reset-logs') || url.includes('/login');
+
+    if (error.response && error.response.status === 401 && !isPinOrAuthAttempt) {
       // Clear token and trigger event or state if needed
       if (localStorage.getItem('ssas_token')) {
         localStorage.removeItem('ssas_token');
