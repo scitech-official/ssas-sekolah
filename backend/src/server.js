@@ -43,6 +43,31 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Database Diagnostic Check (For debugging deployment connection)
+app.get('/api/debug-db', async (req, res) => {
+  try {
+    const prisma = require('./config/prisma');
+    const userCount = await prisma.user.count();
+    res.json({
+      success: true,
+      message: 'Koneksi database PostgreSQL Supabase BERHASIL!',
+      userCount,
+      databaseUrlConfigured: !!process.env.DATABASE_URL,
+      databaseUrlSample: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'TIDAK DITEMUKAN',
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Gagal terhubung ke database Supabase',
+      errorName: err.name,
+      errorCode: err.code,
+      errorMessage: err.message,
+      databaseUrlConfigured: !!process.env.DATABASE_URL,
+      databaseUrlSample: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'TIDAK DITEMUKAN',
+    });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
