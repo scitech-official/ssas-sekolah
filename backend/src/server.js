@@ -47,6 +47,20 @@ app.get('/api/health', (req, res) => {
 app.get('/api/debug-db', async (req, res) => {
   const results = {};
   const { PrismaClient } = require('@prisma/client');
+  const net = require('net');
+  const testTcp = (host, port) => new Promise(resolve => {
+    const socket = new net.Socket();
+    socket.setTimeout(4000);
+    socket.on('connect', () => { socket.destroy(); resolve({ connected: true }); });
+    socket.on('timeout', () => { socket.destroy(); resolve({ connected: false, error: 'TIMEOUT' }); });
+    socket.on('error', (err) => { resolve({ connected: false, error: err.message }); });
+    socket.connect(port, host);
+  });
+
+  results.tcp = {
+    pooler6543: await testTcp('aws-0-ap-southeast-1.pooler.supabase.com', 6543),
+    pooler5432: await testTcp('aws-0-ap-southeast-1.pooler.supabase.com', 5432),
+  };
 
   // Test 1: Standard Prisma instance
   try {
