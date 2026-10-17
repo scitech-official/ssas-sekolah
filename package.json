@@ -1,0 +1,18 @@
+{
+  "name": "web-absensi-smp3",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart School Attendance System (SSAS) SMP Negeri 3 Jember",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "seed": "npm --prefix backend run prisma:seed",
+    "build": "npm --prefix frontend run build",
+    "build:all": "npm --prefix backend run build && npm --prefix frontend run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

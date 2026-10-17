@@ -1,0 +1,37 @@
+{
+  "name": "ssas-backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:seed": "node prisma/seed.js",
+    "prisma:studio": "prisma studio",
+    "build": "prisma generate && prisma db push"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.11",
+    "@prisma/client": "^6.4.0",
+    "archiver": "^7.0.1",
+    "axios": "^1.7.9",
+    "bcryptjs": "^3.0.2",
+    "bwip-js": "^4.5.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "prisma": "^6.4.0"
+  }
+}

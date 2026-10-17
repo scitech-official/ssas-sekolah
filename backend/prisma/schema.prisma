@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("admin") // "admin" | "reguler"
+  pinHash      String?  // PIN 6 digit untuk aksi sensitif (Reset Riwayat)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Student {
+  id             String       @id @default(uuid())
+  nisn           String       @unique
+  name           String
+  className      String       // contoh: "7-A", "8-B", "9-F"
+  parentWaNumber String       // Format: 628xxx
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  attendances    Attendance[]
+
+  @@index([nisn])
+  @@index([className])
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      String   // Format YYYY-MM-DD
+  timeIn    String?  // Format HH:mm:ss
+  status    String   // "HADIR" | "TELAT" | "ALPA" | "IZIN" | "SAKIT"
+  note      String?  // Alasan izin/sakit
+  waSent    Boolean  @default(false)
+  waStatus  String?  // "PENDING" | "SENT" | "FAILED" | "MOCK_SENT"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+  @@index([date])
+  @@index([studentId, date])
+}
+
+model Holiday {
+  id          String   @id @default(uuid())
+  holidayDate String   @unique // Format YYYY-MM-DD
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([holidayDate])
+}
+
+model Setting {
+  id                Int      @id @default(1)
+  timeStart         String   @default("06:00")
+  timeLate          String   @default("07:00")
+  timeAlpa          String   @default("08:00")
+  waMessageTemplate String   @default("Yth. Bapak/Ibu Wali Murid,\n\nDiberitahukan bahwa ananda [NAMA] telah tercatat [STATUS] di sistem presensi sekolah pada tanggal [TANGGAL] pukul [JAM] WIB.\n\nTerima kasih atas kerja sama Bapak/Ibu.")
+  fonnteApiToken    String   @default("")
+  fonnteMockMode    Boolean  @default(true)
+  schoolName        String   @default("SMP NEGERI 3 JEMBER")
+  academicYear      String   @default("2024/2025")
+  semester          String   @default("Ganjil")
+  updatedAt         DateTime @updatedAt
+}
+
+model WaLog {
+  id        String   @id @default(uuid())
+  studentId String?
+  recipient String
+  message   String
+  status    String   // "SUCCESS" | "FAILED" | "MOCK"
+  response  String?
+  createdAt DateTime @default(now())
+}

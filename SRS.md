@@ -1,0 +1,74 @@
+System Requirements Specification (SRS)
+Product Name: Smart School Attendance System (SSAS)
+Document Version: 1.0
+-	1. Infrastruktur & Deployment Environment
+-	Sistem ini menggunakan arsitektur decoupled (pemisahan frontend dan backend) untuk memastikan performa cron job dan antrean pesan berjalan optimal tanpa limitasi timeout serverless.
+-	Komponen	-	Spesifikasi / Layanan	-	Fungsi Utama
+-	Frontend Server	-	Vercel (Hobby/Free Tier)	-	Hosting aplikasi React.js. Menyajikan UI/UX yang cepat dengan Edge Network.
+-	Backend Server	-	Render.com (Web Service)	-	Hosting Node.js/Express.js. Menjalankan REST API secara persisten dan mengeksekusi Cron Job.
+-	Database Server	-	Supabase / Neon.tech (Free Tier)	-	Penyimpanan PostgreSQL terkelola (managed database).
+-	Message Broker	-	Upstash / Render Redis	-	Penyimpanan in-memory (Redis) untuk antrean pengiriman pesan WhatsApp (BullMQ).
+-	Domain	-	Custom Domain (TLD)	-	Diarahkan melalui DNS manajemen Vercel (misal: absensi.sekolah.sch.id).
+-	2. Kebutuhan Perangkat Keras (Hardware) & Klien
+-	Sistem tidak membutuhkan spesifikasi server lokal tinggi karena berjalan di cloud, namun membutuhkan standar perangkat klien di lokasi sekolah.
+-	Pemindai Barcode (Scanner): 1D Wireless Barcode Scanner dengan USB receiver dongle. Harus mendukung mode Keyboard Emulator (Otomatis mengirimkan keystroke NISN diakhiri dengan Enter / \n). 
+-	Perangkat Admin/Piket: PC atau Laptop (Windows / macOS / Linux) dengan minimal 4GB RAM. Memiliki minimal 1 port USB Type-A yang berfungsi untuk dongle scanner.
+-	Browser Klien: Google Chrome, Microsoft Edge, atau Mozilla Firefox versi terbaru (mendukung modern JavaScript dan WebSockets jika diperlukan).
+-	Koneksi Internet: Minimal 10 Mbps stabil di area piket untuk memastikan latensi antara pemindaian, server backend, dan Fonnte API berada di bawah 1.5 detik.
+-	3. Skema Database Inti (PostgreSQL)
+-	Rancangan Entity Relationship difokuskan pada relasi rasional untuk mempermudah kueri pelaporan.
+-	3.1. Tabel users
+-	Mengelola autentikasi admin.
+-	id (UUID, Primary Key)
+-	username (Varchar, Unique)
+-	password_hash (Varchar) - Bcrypt encrypted
+-	role (Enum: admin, reguler)
+-	pin_hash (Varchar, Nullable) - Untuk verifikasi hapus log
+-	3.2. Tabel students
+-	Menyimpan data induk siswa.
+-	id (UUID, Primary Key)
+-	nisn (Varchar, Unique, Indexed) - Sumber data barcode
+-	name (Varchar)
+-	class_name (Varchar, Indexed)
+-	parent_wa_number (Varchar) - Format 628xxx
+-	3.3. Tabel attendances
+-	Mencatat log kehadiran harian.
+-	id (UUID, Primary Key)
+-	student_id (UUID, Foreign Key)
+-	date (Date, Indexed)
+-	time_in (Time, Nullable)
+-	status (Enum: HADIR, TELAT, ALPA, IZIN, SAKIT)
+-	note (Text, Nullable) - Untuk alasan izin/sakit
+-	Constraint: Unique gabungan antara student_id dan date untuk mencegah duplikasi absensi di hari yang sama.
+-	3.4. Tabel holidays (Kalender Akademik)
+-	id (UUID, Primary Key)
+-	holiday_date (Date, Unique)
+-	description (Varchar)
+-	3.5. Tabel settings
+-	Menyimpan konfigurasi global (hanya 1 baris/record aktif).
+-	time_start (Time) - Contoh: 06:00
+-	time_late (Time) - Contoh: 07:00
+-	time_alpa (Time) - Contoh: 08:00
+-	wa_message_template (Text)
+-	fonnte_api_token (Varchar)
+-	4. Mekanisme Proses & Integrasi (Backend Logic)
+-	4.1. Global Event Listener (Frontend)
+-	React menggunakan useEffect yang bind ke event window.addEventListener('keydown'). Logika debounce/throttle akan mengumpulkan keystroke dari scanner (yang diketik sangat cepat, misal < 50ms per karakter) hingga mendeteksi tombol Enter. String NISN yang terkumpul langsung dikirim sebagai POST request ke API Backend.
+-	4.2. Job Queue & Limitasi Fonnte (Redis)
+-	Untuk mencegah Fonnte rate-limit atau pemblokiran nomor, sistem menggunakan BullMQ (berbasis Redis).
+-	Setiap kali absensi ter-simpan, data (Nomor WA, Pesan) dimasukkan ke antrean.
+-	Worker diatur untuk mengeksekusi maksimal 2 hingga 5 pesan per detik.
+-	Jika Fonnte mengembalikan Error 500 atau Timeout, worker menerapkan Exponential Backoff Retry maksimal 3 kali.
+-	4.3. Algoritma Cron Job (Alpa Otomatis)
+-	Menggunakan library seperti node-cron.
+-	Cron berjalan setiap hari kerja (Senin - Sabtu) setiap menit.
+-	Mengecek apakah waktu server saat ini >= time_alpa dari tabel settings.
+-	Jika ya, cek tabel holidays. Jika hari ini libur, hentikan operasi.
+-	Jika bukan libur, jalankan kueri: Ambil semua student_id yang belum ada di tabel attendances pada tanggal hari ini.
+-	Bulk insert siswa-siswa tersebut ke attendances dengan status ALPA.
+-	Push pesan pemberitahuan Alpa massal ke antrean Redis/BullMQ.
+-	5. Keamanan Sistem (Security Requirements)
+-	Autentikasi API: Backend dilindungi dengan otentikasi berbasis JWT (JSON Web Token) dengan expiry time (misal: 24 jam) untuk Admin.
+-	CORS (Cross-Origin Resource Sharing): Backend Express.js dikonfigurasi untuk hanya menerima request dari origin domain Vercel yang telah ditentukan.
+-	Validasi Payload: Menggunakan library seperti Joi atau Zod di Express.js untuk memastikan data NISN, tanggal, dan form Izin/Sakit yang masuk tidak mengandung injeksi SQL/XSS.
+-	Enkripsi Kredensial: Password login dan PIN Admin di-hash menggunakan Bcrypt dengan minimum 10 salt rounds.
