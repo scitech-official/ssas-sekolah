@@ -83,27 +83,23 @@ app.get('/api/debug-db', async (req, res) => {
     }
   }
 
-  // Test 3: Direct Supabase Host (port 5432 IPv6)
-  const match = (process.env.DATABASE_URL || '').match(/:([^@]+)@/);
-  if (match) {
-    const pwd = match[1];
-    const directHostUrl = `postgresql://postgres:${pwd}@db.xxwpzwrufvozpvqmusix.supabase.co:5432/postgres`;
-    try {
-      const hostPrisma = new PrismaClient({
-        datasources: { db: { url: directHostUrl } }
-      });
-      results.directHost5432 = {
-        status: 'OK',
-        userCount: await hostPrisma.user.count(),
-      };
-      await hostPrisma.$disconnect();
-    } catch (err) {
-      results.directHost5432 = {
-        status: 'FAILED',
-        name: err.name,
-        message: err.message,
-      };
-    }
+  // Test 3: Direct Supabase Host (db.xxwpzwrufvozpvqmusix.supabase.co:5432)
+  const directHostUrl = "postgresql://postgres:Sc1tcch_a26@db.xxwpzwrufvozpvqmusix.supabase.co:5432/postgres";
+  try {
+    const hostPrisma = new PrismaClient({
+      datasources: { db: { url: directHostUrl } }
+    });
+    results.directHost5432 = {
+      status: 'OK',
+      userCount: await hostPrisma.user.count(),
+    };
+    await hostPrisma.$disconnect();
+  } catch (err) {
+    results.directHost5432 = {
+      status: 'FAILED',
+      name: err.name,
+      message: err.message,
+    };
   }
 
   res.json({
