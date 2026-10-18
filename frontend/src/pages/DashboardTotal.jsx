@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api, { getApiUrl } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -17,6 +17,9 @@ import {
   ShieldCheck,
   UserCheck,
   Calendar,
+  CalendarX,
+  X,
+  ChevronDown,
   Layers,
   ChevronRight,
   Save,
@@ -76,12 +79,48 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
     onConfirm: () => {},
   });
 
-  // Fast permission quick form (Admin)
+  // Indonesian Day & Date formatting
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const now = new Date();
+  const currentDayName = dayNames[now.getDay()];
+  const currentFormattedDate = `${currentDayName}, ${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  // Holidays and Sunday detection
+  const [holidays, setHolidays] = useState([]);
+  const isSunday = now.getDay() === 0;
+  const todayHoliday = holidays.find((h) => h.holidayDate === todayDateStr);
+  const isOffDay = isSunday || Boolean(todayHoliday);
+  const offDayReason = isSunday 
+    ? 'Hari Minggu (Libur Akhir Pekan)' 
+    : (todayHoliday?.description || 'Hari Libur Khusus Sekolah');
+
+  // Fast permission quick form (Admin) & Searchable Combobox
   const [allStudents, setAllStudents] = useState([]);
   const [quickStudentId, setQuickStudentId] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const studentDropdownRef = useRef(null);
   const [quickStatus, setQuickStatus] = useState('IZIN');
   const [quickNote, setQuickNote] = useState('');
   const [quickSuccess, setQuickSuccess] = useState('');
+
+  // Close student search dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (studentDropdownRef.current && !studentDropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Class table filters (Reguler)
   const [selectedLevel, setSelectedLevel] = useState('ALL');
@@ -90,10 +129,11 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [sumRes, statsRes, setRes] = await Promise.all([
+      const [sumRes, statsRes, setRes, holRes] = await Promise.all([
         api.get('/attendance/today'),
         api.get('/attendance/stats-classes'),
         api.get('/settings'),
+        api.get('/holidays'),
       ]);
 
       if (sumRes.data.success) {
@@ -114,6 +154,9 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
           timeAlpa: setRes.data.data.timeAlpa || '08:00',
         });
       }
+      if (holRes.data.success) {
+        setHolidays(holRes.data.data || []);
+      }
     } catch (err) {
       console.error('Fetch dashboard error:', err);
     } finally {
@@ -123,9 +166,9 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
 
   useEffect(() => {
     fetchData();
-    // Load student list for quick permission if admin
+    // Load student list for quick permission if admin (fetch all active students)
     if (isAdmin) {
-      api.get('/students?limit=250').then((res) => {
+      api.get('/students?limit=1500').then((res) => {
         if (res.data.success) setAllStudents(res.data.data || []);
       });
     }
@@ -198,6 +241,8 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
           if (res.data.success) {
             setQuickSuccess(`Berhasil menetapkan ${quickStatus} untuk siswa.`);
             setQuickStudentId('');
+            setStudentSearch('');
+            setIsDropdownOpen(false);
             setQuickNote('');
             fetchData();
             setTimeout(() => setQuickSuccess(''), 4000);
@@ -211,6 +256,18 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
       },
     });
   };
+
+  // Selected student and filtered students for Quick Permission Searchable Combobox
+  const selectedStudent = allStudents.find((s) => s.id === quickStudentId);
+
+  const filteredStudents = allStudents.filter((s) => {
+    if (!studentSearch.trim()) return true;
+    const query = studentSearch.toLowerCase();
+    const nameMatch = s.name?.toLowerCase().includes(query);
+    const nisnMatch = s.nisn?.includes(query);
+    const classMatch = s.className?.toLowerCase().includes(query);
+    return nameMatch || nisnMatch || classMatch;
+  });
 
   // Trigger Confirmation: Edit Parameter Waktu Absen
   const triggerSaveParamTimes = (e) => {
@@ -263,8 +320,17 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
     return matchesLevel && matchesSearch;
   });
 
-  // Dynamic Greeting based on operating hours
+  // Dynamic Greeting based on operating hours or holidays
   const getDynamicGreeting = () => {
+    if (isOffDay) {
+      return {
+        badge: isSunday ? 'LIBUR AKHIR PEKAN (MINGGU)' : `LIBUR SEKOLAH • ${(todayHoliday?.description || 'LIBUR KHUSUS').toUpperCase()}`,
+        badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+        title: `Hari Ini Sekolah Libur • ${offDayReason}`,
+        desc: 'Tidak ada sesi kegiatan belajar mengajar atau presensi wajib. Sistem auto-alpa dinonaktifkan.',
+      };
+    }
+
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 7) {
       return {
@@ -388,9 +454,14 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
             <img src="/logo.png" alt="Logo SMPN 3 Jember" className="w-full h-full object-contain" />
           </div>
           <div>
-            <div className="flex flex-wrap items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${greeting.badgeColor}`}>
                 {greeting.badge}
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>{currentFormattedDate}</span>
               </span>
               <span className="text-slate-300">•</span>
               <span className="text-xs font-semibold text-slate-500">
@@ -425,6 +496,28 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
           )}
         </div>
       </div>
+
+      {/* Holiday / Sunday Notice Alert Banner */}
+      {isOffDay && (
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 border border-rose-200/90 rounded-2xl flex items-start space-x-3.5 shadow-sm text-slate-800 animate-fadeIn">
+          <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 font-bold mt-0.5">
+            <CalendarX className="w-5 h-5" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-extrabold text-sm sm:text-base text-rose-900">
+                Pemberitahuan Hari Libur Sekolah
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-200/90 text-rose-800 border border-rose-300">
+                {offDayReason}
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-4xl">
+              Hari ini ({currentFormattedDate}) terhitung sebagai <strong>hari libur sekolah</strong>. Sesi presensi siswa di gerbang ditiadakan dan sistem tidak akan menandai siswa sebagai status Alpa.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Main Metric Cards Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
@@ -734,19 +827,93 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
             )}
 
             <form onSubmit={triggerQuickPermission} className="space-y-3">
-              <select
-                required
-                value={quickStudentId}
-                onChange={(e) => setQuickStudentId(e.target.value)}
-                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-              >
-                <option value="">-- Pilih Siswa --</option>
-                {allStudents.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.className} - {s.nisn})
-                  </option>
-                ))}
-              </select>
+              {/* Searchable Student Combobox */}
+              <div className="relative" ref={studentDropdownRef}>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                  Pilih Siswa (Cari Nama atau NISN)
+                </label>
+                {selectedStudent ? (
+                  <div className="flex items-center justify-between p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl">
+                    <div className="flex items-center space-x-2 truncate">
+                      <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white font-mono font-bold text-[10px]">
+                        {selectedStudent.className}
+                      </span>
+                      <span className="text-xs font-bold text-slate-800 truncate">
+                        {selectedStudent.name}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500">
+                        ({selectedStudent.nisn})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuickStudentId('');
+                        setStudentSearch('');
+                        setIsDropdownOpen(true);
+                      }}
+                      className="p-1 text-slate-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
+                      title="Ganti Siswa"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={studentSearch}
+                      onChange={(e) => {
+                        setStudentSearch(e.target.value);
+                        setIsDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsDropdownOpen(true)}
+                      placeholder="Ketik Nama atau NISN siswa..."
+                      className="w-full text-xs pl-8 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+                    />
+                    <ChevronDown
+                      className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 cursor-pointer"
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    />
+                  </div>
+                )}
+
+                {/* Dropdown Popover List */}
+                {isDropdownOpen && !selectedStudent && (
+                  <div className="absolute z-30 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl divide-y divide-slate-100">
+                    {filteredStudents.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-slate-400">
+                        {allStudents.length === 0
+                          ? 'Memuat data siswa...'
+                          : `Tidak ditemukan siswa dengan kata kunci "${studentSearch}"`}
+                      </div>
+                    ) : (
+                      filteredStudents.slice(0, 60).map((s) => (
+                        <div
+                          key={s.id}
+                          onClick={() => {
+                            setQuickStudentId(s.id);
+                            setIsDropdownOpen(false);
+                            setStudentSearch('');
+                          }}
+                          className="p-2.5 hover:bg-blue-50/70 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                        >
+                          <div className="truncate mr-2">
+                            <span className="font-bold text-slate-800">{s.name}</span>
+                            <span className="text-[10px] text-slate-400 ml-1.5 font-mono">
+                              NISN: {s.nisn}
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 flex-shrink-0">
+                            {s.className}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <select
