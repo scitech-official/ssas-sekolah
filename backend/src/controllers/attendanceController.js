@@ -208,9 +208,18 @@ async function getTodaySummary(req, res) {
     // Latest 20 scans for live stream feed
     const recentScans = attendances.slice(0, 20);
 
+    // Check if queryDate is a WFA day or Holiday
+    const todayHoliday = await prisma.holiday.findUnique({
+      where: { holidayDate: queryDate },
+    });
+    const isWfa = Boolean(todayHoliday && todayHoliday.description && todayHoliday.description.startsWith('[WFA]'));
+    const wfaReason = isWfa ? todayHoliday.description.replace(/^\[WFA\]\s*/, '') : '';
+
     return res.json({
       success: true,
       date: queryDate,
+      isWfa,
+      wfaReason,
       metrics: {
         totalStudents,
         totalHadir,

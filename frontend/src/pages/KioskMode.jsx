@@ -45,6 +45,8 @@ export default function KioskMode({ onExit }) {
   const [manualInput, setManualInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanSpeed, setScanSpeed] = useState('~0.25 detik/tap');
+  const [isWfa, setIsWfa] = useState(false);
+  const [wfaReason, setWfaReason] = useState('');
 
   // Keystroke buffer for physical 1D wireless barcode scanner (Keyboard Wedge)
   const keyBufferRef = useRef('');
@@ -122,6 +124,10 @@ export default function KioskMode({ onExit }) {
           totalBelumMasuk: m.totalBelumMasuk,
         });
         setLiveFeed(sumRes.data.recentScans || []);
+        if (sumRes.data.isWfa !== undefined) {
+          setIsWfa(Boolean(sumRes.data.isWfa));
+          setWfaReason(sumRes.data.wfaReason || '');
+        }
       }
 
       if (setRes.data.success && setRes.data.data) {
@@ -384,6 +390,14 @@ export default function KioskMode({ onExit }) {
           </button>
         </div>
       </header>
+
+      {/* WFA Active Notification Banner */}
+      {isWfa && (
+        <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-950 border-b border-blue-500/40 px-6 py-2.5 text-center text-xs font-mono font-bold text-blue-200 flex items-center justify-center space-x-2 shadow-md">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse"></span>
+          <span>📢 HARI INI TERJADWAL WFA / PJJ ({wfaReason || 'BELAJAR DARI RUMAH'}). SELURUH SISWA OTOMATIS TERCATAT HADIR.</span>
+        </div>
+      )}
 
       {/* Main Kiosk Body */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 max-w-[1700px] w-full mx-auto">

@@ -54,11 +54,20 @@ async function executeAutoAlpa(force = false) {
       return { executed: false, reason: `Waktu saat ini (${timeStr} WIB) belum mencapai batas Alpa (${timeAlpa} WIB)` };
     }
 
-    // 3. Check if today is marked as a Holiday
+    // 3. Check if today is marked as a Holiday or WFA
     const holiday = await prisma.holiday.findUnique({
       where: { holidayDate: dateStr },
     });
     if (holiday && !force) {
+      if (holiday.description && holiday.description.startsWith('[WFA]')) {
+        const countWfa = await processWfaAttendance(dateStr);
+        return {
+          executed: true,
+          isWfa: true,
+          countWfa,
+          reason: `Hari ini ditandai sebagai hari WFA (${holiday.description}). Seluruh siswa otomatis dicatat HADIR tanpa pesan WA.`,
+        };
+      }
       return { executed: false, reason: `Hari ini ditandai sebagai hari libur (${holiday.description})` };
     }
 
@@ -128,10 +137,61 @@ async function executeAutoAlpa(force = false) {
   }
 }
 
-function initCronJobs() {
-  console.log('🕒 Inisialisasi background Cron Job (Auto-Alpa)...');
+async function processWfaAttendance(targetDate) {
+  try {
+    const { dateStr } = getCurrentWIB();
+    const date = targetDate || dateStr;
 
-  // Immediate check on startup (in case server started after cut-off time)
+    // 1. Fetch all active students
+    const allStudents = await prisma.student.findMany();
+    if (!allStudents.length) return 0;
+
+    // 2. Fetch existing attendance for this date
+    const existing = await prisma.attendance.findMany({
+      where: { date },
+      select: { studentId: true },
+    });
+    const existingMap = new Set(existing.map((e) => e.studentId));
+
+    // 3. Students without attendance
+    const pendingStudents = allStudents.filter((s) => !existingMap.has(s.id));
+    if (!pendingStudents.length) return 0;
+
+    let countHadir = 0;
+    for (const student of pendingStudents) {
+      try {
+        await prisma.attendance.create({
+          data: {
+            studentId: student.id,
+            date,
+            timeIn: '07:00:00',
+            status: 'HADIR',
+            note: 'WFA / Pembelajaran Jarak Jauh (BDR)',
+            waSent: false,
+            waStatus: 'SKIPPED_WFA',
+          },
+        });
+        countHadir++;
+      } catch (err) {
+        // Ignore duplicate if race condition occurs
+      }
+    }
+
+    if (countHadir > 0) {
+      console.log(`🏠 [WFA PRESENSI] Berhasil mencatat kehadiran otomatis ${countHadir} siswa untuk hari WFA (${date}) tanpa pengiriman WA.`);
+    }
+
+    return countHadir;
+  } catch (error) {
+    console.error('❌ Error processWfaAttendance:', error.message || error);
+    return 0;
+  }
+}
+
+function initCronJobs() {
+  console.log('🕒 Inisialisasi background Cron Job (Auto-Alpa & WFA Check)...');
+
+  // Immediate check on startup (in case server started after cut-off time or on WFA day)
   executeAutoAlpa().catch((err) => {
     console.error('❌ Error executing initial Auto-Alpa check on startup:', err);
   });
@@ -149,5 +209,6 @@ function initCronJobs() {
 module.exports = {
   initCronJobs,
   executeAutoAlpa,
+  processWfaAttendance,
   getCurrentWIB,
 };

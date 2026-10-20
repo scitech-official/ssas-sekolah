@@ -62,6 +62,8 @@ export default function PengaturanSistem() {
   // Calendar State - automatically follows this year (dynamic)
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [holidays, setHolidays] = useState([]);
+  const [wfaDays, setWfaDays] = useState([]);
+  const [calendarMode, setCalendarMode] = useState('HOLIDAY'); // 'HOLIDAY' | 'WFA'
   const [showToken, setShowToken] = useState(false);
   const [togglingDate, setTogglingDate] = useState('');
 
@@ -140,8 +142,19 @@ export default function PengaturanSistem() {
           setWaStats(setRes.data.waStats);
         }
       }
-      if (holRes.data.success) {
-        setHolidays(holRes.data.data.map(h => h.holidayDate));
+      if (holRes.data.success && Array.isArray(holRes.data.data)) {
+        const holList = [];
+        const wfaList = [];
+        holRes.data.data.forEach((h) => {
+          const isWfa = Boolean(h.isWfa || (h.description && h.description.startsWith('[WFA]')));
+          if (isWfa) {
+            wfaList.push(h.holidayDate);
+          } else {
+            holList.push(h.holidayDate);
+          }
+        });
+        setHolidays(holList);
+        setWfaDays(wfaList);
       }
     } catch (err) {
       console.error('Fetch settings error:', err);
@@ -218,20 +231,35 @@ export default function PengaturanSistem() {
     });
   };
 
-  // Toggle Holiday Date
-  const handleToggleHoliday = async (dateStr) => {
+  // Toggle Holiday or WFA Date
+  const handleToggleCalendarDate = async (dateStr) => {
     try {
       setTogglingDate(dateStr);
-      const res = await api.post('/holidays/toggle', { holidayDate: dateStr });
+      const res = await api.post('/holidays/toggle', {
+        holidayDate: dateStr,
+        type: calendarMode,
+      });
       if (res.data.success) {
-        if (res.data.action === 'ADDED') {
-          setHolidays(prev => [...prev, dateStr]);
-        } else {
-          setHolidays(prev => prev.filter(d => d !== dateStr));
+        const { action, type, message } = res.data;
+        if (action === 'REMOVED') {
+          setHolidays((prev) => prev.filter((d) => d !== dateStr));
+          setWfaDays((prev) => prev.filter((d) => d !== dateStr));
+          toast.info(`Tanggal ${dateStr} dikembalikan ke Hari Efektif Sekolah.`);
+        } else if (action === 'ADDED' || action === 'UPDATED') {
+          if (type === 'WFA') {
+            setHolidays((prev) => prev.filter((d) => d !== dateStr));
+            setWfaDays((prev) => [...prev.filter((d) => d !== dateStr), dateStr]);
+            toast.success(message || `Tanggal ${dateStr} ditandai sebagai Hari WFA / PJJ.`);
+          } else {
+            setWfaDays((prev) => prev.filter((d) => d !== dateStr));
+            setHolidays((prev) => [...prev.filter((d) => d !== dateStr), dateStr]);
+            toast.success(message || `Tanggal ${dateStr} ditandai sebagai Hari Libur Sekolah.`);
+          }
         }
       }
     } catch (err) {
-      console.error('Toggle holiday error:', err);
+      console.error('Toggle calendar date error:', err);
+      toast.error(err.response?.data?.message || 'Gagal mengubah status tanggal kalender');
     } finally {
       setTogglingDate('');
     }
@@ -440,6 +468,7 @@ export default function PengaturanSistem() {
       const dateStr = `${currentYear}-${String(monthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const isSunday = dayOfWeek === 0;
       const isHoliday = holidays.includes(dateStr);
+      const isWfa = wfaDays.includes(dateStr);
       const isToggling = togglingDate === dateStr;
 
       cells.push(
@@ -447,18 +476,28 @@ export default function PengaturanSistem() {
           key={d}
           type="button"
           disabled={isToggling}
-          onClick={() => handleToggleHoliday(dateStr)}
+          onClick={() => handleToggleCalendarDate(dateStr)}
           className={`w-6 h-6 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[10px] sm:text-[9px] font-mono font-bold transition-all cursor-pointer ${
             isHoliday
-              ? 'bg-red-600 text-white shadow-sm'
+              ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-300'
+              : isWfa
+              ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-300 font-bold'
               : isSunday
-              ? 'text-red-500 hover:bg-red-50'
+              ? 'text-rose-500 hover:bg-rose-50'
               : 'text-slate-700 hover:bg-slate-200'
           }`}
-          title={`${dateStr} ${isHoliday ? '(Libur Khusus/Sekolah)' : isSunday ? '(Minggu)' : ''}`}
+          title={`${dateStr} ${
+            isHoliday
+              ? '(Libur Khusus/Sekolah)'
+              : isWfa
+              ? '(Hari WFA / Belajar Dari Rumah - Siswa Otomatis Hadir Tanpa WA)'
+              : isSunday
+              ? '(Minggu)'
+              : '(Hari Efektif)'
+          }`}
         >
           {isToggling ? (
-            <div className="w-2.5 h-2.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className={`w-2.5 h-2.5 border-2 ${calendarMode === 'WFA' ? 'border-blue-500' : 'border-rose-500'} border-t-transparent rounded-full animate-spin`}></div>
           ) : (
             d
           )}
@@ -524,8 +563,14 @@ export default function PengaturanSistem() {
                 </div>
               </div>
 
-              <div className="px-3 py-1 bg-red-50 text-red-700 border border-red-200 rounded-full text-xs font-mono font-bold">
-                {holidays.length} Hari Libur Khusus Terpilih
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-xs font-mono font-bold">
+                  {holidays.length} Hari Libur Khusus
+                </div>
+                <div className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-mono font-bold flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                  <span>{wfaDays.length} Hari WFA / PJJ</span>
+                </div>
               </div>
             </div>
 
@@ -584,13 +629,9 @@ export default function PengaturanSistem() {
               </div>
             </div>
 
-            {/* Legend & Year switch */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3 border-t border-slate-100">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="text-xs font-bold text-slate-700">
-                  Kalender 12 Bulan:
-                </span>
-                
+            {/* Legend, Mode Switcher & Year switch */}
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <div className="flex flex-wrap items-center gap-3">
                 {/* Dynamic Year Switcher */}
                 <div className="inline-flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200 shadow-inner">
                   <button
@@ -622,16 +663,51 @@ export default function PengaturanSistem() {
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
+
+                {/* Mode Klik Switcher (Libur vs WFA) */}
+                <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMode('HOLIDAY')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
+                      calendarMode === 'HOLIDAY'
+                        ? 'bg-rose-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Klik tanggal kalender untuk menandai Hari Libur"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                    <span>Mode Hari Libur</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMode('WFA')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
+                      calendarMode === 'WFA'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Klik tanggal kalender untuk menandai Hari WFA / PJJ"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                    <span>Mode Hari WFA (BDR)</span>
+                  </button>
+                </div>
               </div>
 
+              {/* Legend Badges */}
               <div className="flex flex-wrap items-center gap-3 text-[11px]">
                 <span className="flex items-center space-x-1.5 text-slate-600">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-400"></span>
-                  <span>Minggu (Otomatis)</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                  <span>Minggu</span>
                 </span>
-                <span className="flex items-center space-x-1.5 text-red-700 font-bold">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-600"></span>
-                  <span>Libur Khusus Terpilih</span>
+                <span className="flex items-center space-x-1.5 text-rose-700 font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span>
+                  <span>Libur Khusus</span>
+                </span>
+                <span className="flex items-center space-x-1.5 text-blue-700 font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                  <span>WFA / PJJ (Hadir)</span>
                 </span>
                 <span className="flex items-center space-x-1.5 text-slate-500">
                   <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
@@ -668,12 +744,21 @@ export default function PengaturanSistem() {
               ))}
             </div>
 
-            {/* Information Callout Banner */}
-            <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl flex items-start space-x-3 text-xs text-blue-900 leading-relaxed">
-              <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">Aturan Otomatis Presensi Hari Libur: </span>
-                Sistem mesin barcode scanner dan pengiriman notifikasi WhatsApp tidak akan mencatat siswa sebagai status Alpa pada hari Minggu serta tanggal yang ditandai merah sebagai hari libur resmi/khusus sekolah.
+            {/* Information Callout Banners */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+              <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl flex items-start space-x-2.5 text-xs text-rose-900 leading-relaxed">
+                <CheckCircle2 className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Aturan Hari Libur: </span>
+                  Sistem scanner gerbang dan WhatsApp tidak mencatat siswa Alpa pada hari Minggu serta tanggal yang ditandai merah sebagai hari libur resmi/khusus sekolah.
+                </div>
+              </div>
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl flex items-start space-x-2.5 text-xs text-blue-900 leading-relaxed">
+                <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Aturan Hari WFA (BDR): </span>
+                  Pada tanggal biru, seluruh siswa otomatis dicatat berstatus <strong className="text-blue-800">HADIR</strong> di sistem tanpa pengiriman pesan WhatsApp ke orang tua, dan proses alpa otomatis dinonaktifkan.
+                </div>
               </div>
             </div>
           </div>

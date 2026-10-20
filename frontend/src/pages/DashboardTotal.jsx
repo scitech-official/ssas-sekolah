@@ -92,12 +92,15 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
 
   // Holidays and Sunday detection
   const [holidays, setHolidays] = useState([]);
-  const isSunday = now.getDay() === 0;
   const todayHoliday = holidays.find((h) => h.holidayDate === todayDateStr);
-  const isOffDay = isSunday || Boolean(todayHoliday);
+  const isTodayWfa = Boolean(todayHoliday && (todayHoliday.isWfa || (todayHoliday.description && todayHoliday.description.startsWith('[WFA]'))));
+  const isOffDay = isSunday || (Boolean(todayHoliday) && !isTodayWfa);
   const offDayReason = isSunday 
     ? 'Hari Minggu (Libur Akhir Pekan)' 
     : (todayHoliday?.description || 'Hari Libur Khusus Sekolah');
+  const wfaReason = isTodayWfa
+    ? (todayHoliday?.description?.replace(/^\[WFA\]\s*/, '') || 'WFA / Belajar Dari Rumah')
+    : '';
 
   // Fast permission quick form (Admin) & Searchable Combobox
   const [allStudents, setAllStudents] = useState([]);
@@ -322,6 +325,15 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
 
   // Dynamic Greeting based on operating hours or holidays
   const getDynamicGreeting = () => {
+    if (isTodayWfa) {
+      return {
+        badge: 'MODE WFA / BDR AKTIF',
+        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+        title: `Hari Ini Pembelajaran Jarak Jauh (WFA) • ${wfaReason}`,
+        desc: 'Seluruh siswa secara otomatis dicatat berstatus HADIR di sistem tanpa pengiriman notifikasi WhatsApp ke orang tua.',
+      };
+    }
+
     if (isOffDay) {
       return {
         badge: isSunday ? 'LIBUR AKHIR PEKAN (MINGGU)' : `LIBUR SEKOLAH • ${(todayHoliday?.description || 'LIBUR KHUSUS').toUpperCase()}`,
