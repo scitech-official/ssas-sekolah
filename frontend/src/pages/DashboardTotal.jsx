@@ -92,6 +92,7 @@ export default function DashboardTotal({ onStartKiosk, onSelectClass }) {
 
   // Holidays and Sunday detection
   const [holidays, setHolidays] = useState([]);
+  const isSunday = now.getDay() === 0;
   const todayHoliday = holidays.find((h) => h.holidayDate === todayDateStr);
   const isTodayWfa = Boolean(todayHoliday && (todayHoliday.isWfa || (todayHoliday.description && todayHoliday.description.startsWith('[WFA]'))));
   const isOffDay = isSunday || (Boolean(todayHoliday) && !isTodayWfa);
