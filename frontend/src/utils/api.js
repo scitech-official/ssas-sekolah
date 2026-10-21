@@ -27,9 +27,9 @@ const api = axios.create({
   timeout: 15000,
 });
 
-// Attach JWT token from localStorage if available
+// Attach JWT token from sessionStorage if available
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('ssas_token');
+  const token = sessionStorage.getItem('ssas_token') || localStorage.getItem('ssas_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -48,7 +48,9 @@ api.interceptors.response.use(
 
     if (error.response && error.response.status === 401 && !isPinOrAuthAttempt) {
       // Clear token and trigger event or state if needed
-      if (localStorage.getItem('ssas_token')) {
+      if (sessionStorage.getItem('ssas_token') || localStorage.getItem('ssas_token')) {
+        sessionStorage.removeItem('ssas_token');
+        sessionStorage.removeItem('ssas_user');
         localStorage.removeItem('ssas_token');
         localStorage.removeItem('ssas_user');
         window.dispatchEvent(new Event('auth_change'));

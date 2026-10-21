@@ -5,18 +5,22 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('ssas_user');
+    const saved = sessionStorage.getItem('ssas_user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [token, setToken] = useState(() => localStorage.getItem('ssas_token') || null);
+  const [token, setToken] = useState(() => sessionStorage.getItem('ssas_token') || null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authLoadingMessage, setAuthLoadingMessage] = useState('');
 
   useEffect(() => {
+    // Clean any old localStorage tokens from previous versions
+    localStorage.removeItem('ssas_token');
+    localStorage.removeItem('ssas_user');
+
     const handleAuthChange = () => {
-      const savedUser = localStorage.getItem('ssas_user');
-      const savedToken = localStorage.getItem('ssas_token');
+      const savedUser = sessionStorage.getItem('ssas_user');
+      const savedToken = sessionStorage.getItem('ssas_token');
       setUser(savedUser ? JSON.parse(savedUser) : null);
       setToken(savedToken || null);
     };
@@ -32,8 +36,10 @@ export function AuthProvider({ children }) {
       const res = await api.post('/auth/login', { username, password });
       if (res.data.success) {
         const { token, user } = res.data;
-        localStorage.setItem('ssas_token', token);
-        localStorage.setItem('ssas_user', JSON.stringify(user));
+        sessionStorage.setItem('ssas_token', token);
+        sessionStorage.setItem('ssas_user', JSON.stringify(user));
+        localStorage.removeItem('ssas_token');
+        localStorage.removeItem('ssas_user');
         setToken(token);
         setUser(user);
         // Small graceful pause so user sees verification feedback
@@ -52,6 +58,8 @@ export function AuthProvider({ children }) {
     setAuthLoading(true);
     setAuthLoadingMessage('Mengakhiri sesi Admin & memuat portal absensi reguler...');
     await new Promise((r) => setTimeout(r, 650));
+    sessionStorage.removeItem('ssas_token');
+    sessionStorage.removeItem('ssas_user');
     localStorage.removeItem('ssas_token');
     localStorage.removeItem('ssas_user');
     setToken(null);

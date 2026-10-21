@@ -12,7 +12,12 @@ import DataSiswa from './pages/DataSiswa';
 import PengaturanSistem from './pages/PengaturanSistem';
 import KioskMode from './pages/KioskMode';
 
+const ADMIN_TABS = ['data-siswa', 'pengaturan', 'kiosk'];
+
 function MainApp() {
+  const { isAdmin, setIsLoginModalOpen, isLoginModalOpen } = useAuth();
+  const toast = useToast();
+
   const [currentTab, setCurrentTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
     if (['absensi-total', 'absensi-perkelas', 'data-siswa', 'pengaturan', 'kiosk'].includes(hash)) {
@@ -23,10 +28,24 @@ function MainApp() {
   const [selectedClassForPerkelas, setSelectedClassForPerkelas] = useState('7-A');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
-  const { isAdmin, setIsLoginModalOpen, isLoginModalOpen } = useAuth();
   const prevIsAdminRef = useRef(isAdmin);
 
+  // Route Guard: Eject regular users if currently on an admin-only tab
+  useEffect(() => {
+    if (!isAdmin && ADMIN_TABS.includes(currentTab)) {
+      setCurrentTab('absensi-total');
+      window.location.hash = 'absensi-total';
+      setIsLoginModalOpen(true);
+      toast.error('Akses Ditolak: Halaman ini memerlukan login Administrator.');
+    }
+  }, [currentTab, isAdmin]);
+
   const handleTabChange = (tab) => {
+    if (!isAdmin && ADMIN_TABS.includes(tab)) {
+      setIsLoginModalOpen(true);
+      toast.error('Akses Ditolak: Halaman ini memerlukan login Administrator.');
+      return;
+    }
     setCurrentTab(tab);
     window.location.hash = tab;
     setSidebarOpen(false);
@@ -36,12 +55,19 @@ function MainApp() {
     const onHashChange = () => {
       const hash = window.location.hash.replace('#', '');
       if (['absensi-total', 'absensi-perkelas', 'data-siswa', 'pengaturan', 'kiosk'].includes(hash)) {
+        if (!isAdmin && ADMIN_TABS.includes(hash)) {
+          setCurrentTab('absensi-total');
+          window.location.hash = 'absensi-total';
+          setIsLoginModalOpen(true);
+          toast.error('Akses Ditolak: Halaman ini memerlukan login Administrator.');
+          return;
+        }
         setCurrentTab(hash);
       }
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  }, [isAdmin]);
 
   // Global Keyboard Shortcuts (Ctrl+K: Search, Esc: Close, F2: Kiosk)
   useEffect(() => {
@@ -148,9 +174,9 @@ function MainApp() {
             <AbsensiPerkelas initialClass={selectedClassForPerkelas} />
           )}
 
-          {currentTab === 'data-siswa' && <DataSiswa />}
+          {currentTab === 'data-siswa' && (isAdmin ? <DataSiswa /> : null)}
 
-          {currentTab === 'pengaturan' && <PengaturanSistem />}
+          {currentTab === 'pengaturan' && (isAdmin ? <PengaturanSistem /> : null)}
         </main>
       </div>
 
